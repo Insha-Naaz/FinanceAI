@@ -37,3 +37,20 @@ git clone https://github.com/InshaNaaz/FinanceAI.git
 cd FinanceAI
 pip install -r requirements.txt
 streamlit run app/main.py
+## Live Demo
+https://financeai.streamlit.app
+
+## Tech Stack
+- Python
+- Streamlit
+- AI Intent Classification
+- SQL Generation
+- Role-Based Access Control
+
+## Features
+- Natural language financial queries
+- Secure SQL execution
+- Modular enterprise architecture
+- Cloud deployment
+
+
