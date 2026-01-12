@@ -220,14 +220,10 @@ st.subheader("Spending by Category")
 
 if category_chart_df.empty:
     st.info("No category data available.")
-elif "category" in category_chart_df.columns and "total" in category_chart_df.columns:
-    st.bar_chart(
-        category_chart_df.set_index("category")["total"]
-    )
 else:
-    st.error("Category chart data is not in expected format.")
-
-st.subheader("Daily Expense Trend")
+    # Force correct column names
+    category_chart_df.columns = ["category", "total"]
+    st.bar_chart(category_chart_df.set_index("category")["total"])
 
 time_series_df = run_query(
     """
