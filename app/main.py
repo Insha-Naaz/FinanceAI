@@ -181,8 +181,8 @@ with st.spinner("Loading dashboard..."):
         """
     )
     # Category-wise spending for chart
-    category_chart_df = run_query(
-    """
+    category_chart_df=run_query( 
+         """
         SELECT category, SUM(amount) AS total
         FROM transactions
         GROUP BY category
@@ -218,12 +218,15 @@ with col3:
         st.metric("Top Category", "No data")
 st.subheader("Spending by Category")
 
-if not category_chart_df.empty:
+if category_chart_df.empty:
+    st.info("No category data available.")
+elif "category" in category_chart_df.columns and "total" in category_chart_df.columns:
     st.bar_chart(
-        data=category_chart_df.set_index("category")["total"]
+        category_chart_df.set_index("category")["total"]
     )
 else:
-    st.info("No category data available.")
+    st.error("Category chart data is not in expected format.")
+
 st.subheader("Daily Expense Trend")
 
 time_series_df = run_query(
