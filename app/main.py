@@ -8,13 +8,23 @@ sys.path.append(ROOT_DIR)
 import streamlit as st
 import pandas as pd
 
+CURRENCY_RATES = {
+    "INR": 1.0,
+    "USD": 0.012,  # approx
+    "EUR": 0.011   # approx
+}
+
+def convert_currency(amount, currency):
+    rate = CURRENCY_RATES.get(currency, 1.0)
+    return amount * rate
+
+
 # --- Session initialization ---
 if "user" not in st.session_state:
     st.session_state.user = None
 
 from infra.database.queries import run_query
 from infra.ai_logger import ai_logger
-from services.insight_service import generate_insights
 from services.auth_service import authenticate, require_permission
 from config.settings import settings
 from core.ai.intent_classifier import classify_intent, QueryIntent
@@ -148,6 +158,8 @@ if st.session_state.user is None:
 st.title("AI-Powered Finance SQL Analyst")
 st.sidebar.title("Finance AI Assistant")
 st.sidebar.caption(f"Environment: {settings.app_env}")
+st.sidebar.subheader("Currency")
+currency = st.sidebar.selectbox("Display amounts in", ["INR", "USD", "EUR"])
 
 st.subheader("Finance Dashboard")
 try:
@@ -168,11 +180,27 @@ with st.spinner("Loading dashboard..."):
         LIMIT 1
         """
     )
+    # Category-wise spending for chart
+    category_chart_df = run_query(
+    """
+        SELECT category, SUM(amount) AS total
+        FROM transactions
+        GROUP BY category
+        ORDER BY total DESC
+        """
+    )
 
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    st.metric("Total Expense", f"₹ {total_expense_df.iloc[0]['total']:.2f}")
+    total_amount = total_expense_df.iloc[0]["total"]
+    converted_total = convert_currency(total_amount, currency)
+    symbol = "₹" if currency == "INR" else "$" if currency == "USD" else "€"
+
+    st.metric(
+        "Total Expense",
+        f"{symbol} {converted_total:.2f}"
+    )
 
 with col2:
     st.metric("Transactions", int(count_df.iloc[0]['count']))
@@ -188,6 +216,32 @@ with col3:
         st.metric("Top Category", top_category)
     else:
         st.metric("Top Category", "No data")
+st.subheader("Spending by Category")
+
+if not category_chart_df.empty:
+    st.bar_chart(
+        data=category_chart_df.set_index("category")["total"]
+    )
+else:
+    st.info("No category data available.")
+st.subheader("Daily Expense Trend")
+
+time_series_df = run_query(
+    """
+    SELECT DATE(date) AS day, SUM(amount) AS total
+    FROM transactions
+    GROUP BY DATE(date)
+    ORDER BY DATE(date)
+    """
+)
+
+if not time_series_df.empty:
+    st.line_chart(
+        data=time_series_df.set_index("day")["total"]
+    )
+else:
+    st.info("No time-series data available.")
+
 
 st.divider()
 
