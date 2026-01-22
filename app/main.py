@@ -126,6 +126,116 @@ def handle_user_query(user_text: str) -> str:
                 total = df.iloc[0][1]
                 return f"Top Category: {category} (Total: {total})"
             return "No transaction data available."
+                # CATEGORY BREAKDOWN
+        elif intent == QueryIntent.CATEGORY_BREAKDOWN:
+            df = run_query(
+                """
+                SELECT category, SUM(amount) AS total
+                FROM transactions
+                GROUP BY category
+                ORDER BY total DESC
+                """
+            )
+            if not df.empty:
+                return df.to_string(index=False)
+            return "No category-wise data available."
+                # LISTING (show all transactions)
+        elif intent == QueryIntent.LISTING:
+            df = run_query(
+                """
+                SELECT date, category, amount
+                FROM transactions
+                ORDER BY date DESC
+                """
+            )
+            if not df.empty:
+                return df.to_string(index=False)
+            return "No transactions available."
+                # SUMMARY (high-level overview)
+        elif intent == QueryIntent.SUMMARY:
+            df = run_query(
+                """
+                SELECT
+                    COUNT(*) AS total_transactions,
+                    SUM(amount) AS total_spent,
+                    AVG(amount) AS avg_spent
+                FROM transactions
+                """
+            )
+            if not df.empty:
+                return (
+                    f"Summary:\n"
+                    f"- Total Transactions: {int(df.iloc[0]['total_transactions'])}\n"
+                    f"- Total Spent: {df.iloc[0]['total_spent']:.2f}\n"
+                    f"- Average Transaction: {df.iloc[0]['avg_spent']:.2f}"
+                )
+            return "No data available for summary."
+                # COMPARISON (last 30 days vs previous 30 days)
+        elif intent == QueryIntent.COMPARISON:
+            df = run_query(
+                """
+                SELECT
+                    SUM(CASE
+                        WHEN date >= DATE('now', '-30 day') THEN amount
+                        ELSE 0
+                    END) AS recent_total,
+                    SUM(CASE
+                        WHEN date < DATE('now', '-30 day')
+                             AND date >= DATE('now', '-60 day') THEN amount
+                        ELSE 0
+                    END) AS previous_total
+                FROM transactions
+                """
+            )
+            if not df.empty:
+                recent = df.iloc[0]["recent_total"]
+                previous = df.iloc[0]["previous_total"]
+                diff = recent - previous
+                return (
+                    f"Comparison:\n"
+                    f"- Last 30 days: {recent:.2f}\n"
+                    f"- Previous 30 days: {previous:.2f}\n"
+                    f"- Difference: {diff:.2f}"
+                )
+            return "Not enough data to compare periods."
+                # BUDGET ALERTS
+        elif intent == QueryIntent.BUDGET_ALERTS:
+            MONTHLY_BUDGET = 50000  # configurable later
+
+            df = run_query(
+                """
+                SELECT SUM(amount) AS total
+                FROM transactions
+                WHERE strftime('%Y-%m', date) = strftime('%Y-%m', 'now')
+                """
+            )
+            if not df.empty and df.iloc[0]["total"] is not None:
+                spent = df.iloc[0]["total"]
+                if spent > MONTHLY_BUDGET:
+                    return f"⚠ Budget exceeded! Spent {spent:.2f} (Limit {MONTHLY_BUDGET})"
+                return f"✅ Budget OK. Spent {spent:.2f} of {MONTHLY_BUDGET}"
+            return "No data available for budget check."
+                # PREDICTION (simple average-based forecast)
+        elif intent == QueryIntent.PREDICTION:
+            df = run_query(
+                """
+                SELECT AVG(amount) AS avg_spent
+                FROM transactions
+                """
+            )
+            if not df.empty and df.iloc[0]["avg_spent"] is not None:
+                predicted = df.iloc[0]["avg_spent"] * 30
+                return f"Projected monthly spend (estimate): {predicted:.2f}"
+            return "Insufficient data for prediction."
+                # AGGREGATION (generic SQL generator)
+        elif intent == QueryIntent.AGGREGATION:
+            sql = generate_sql(user_text)
+            if not sql:
+                return "Unable to infer aggregation query."
+            df = run_query(sql)
+            if not df.empty:
+                return df.to_string(index=False)
+            return "No aggregation result found."
 
         # FALLBACK
         else:
@@ -278,7 +388,10 @@ if user_query:
         require_permission(st.session_state.user, "query")
 
         result_text = handle_user_query(user_query)
-        st.success(result_text)
+        if isinstance(result_text, str) and "\n" in result_text:
+            st.text(result_text)
+        else:
+            st.success(result_text)
         st.stop()
     except PermissionError as pe:
         st.error(str(pe))
